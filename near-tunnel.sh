@@ -359,7 +359,7 @@ BRC
 }
 
 # ---------- menu (tampilan cyberpunk: garis pink + ungu) ----------
-PK='\033[1;95m'; PU='\033[1;35m'; WH='\033[1;37m'; NC='\033[0m'
+PK='\033[1;95m'; PU='\033[1;95m'; WH='\033[1;37m'; NC='\033[0m'  # hanya pink
 box_row() { # box_row <warna-garis> <teks>
   printf "%b║%b %-50s %b║%b\n" "$1" "$NC" "$2" "$1" "$NC"
 }
@@ -435,8 +435,7 @@ menu_loop() {
     )
     local i c
     for i in "${!items[@]}"; do
-      if (( i % 2 == 0 )); then c="$PK"; else c="$PU"; fi
-      box_row "$c" "  ${items[$i]}"
+      box_row "$PK" "  ${items[$i]}"
     done
     echo -e "${PK}╚══════════════════════════════════════════════════╝${NC}"
     printf "%bPilih nomor [0-21]: %b" "$PK" "$NC"
