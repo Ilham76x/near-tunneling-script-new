@@ -254,10 +254,12 @@ print_link() { # print_link <proto> <user>
 }
 
 list_accounts() {
-  local f proto user exp now days_left
+  local f proto user exp now days_left n=0
   now=$(now_epoch)
-  printf '%-14s %-12s %-12s %-16s %s\n' "PROTOKOL" "USER" "DIBUAT" "BERAKHIR" "SISA"
-  echo "----------------------------------------------------------------------"
+  echo -e "${PKI}  DAFTAR AKUN TERSIMPAN${NC}"
+  echo -e "${PK}┌─────┬──────────────┬────────────┬──────────────┐${NC}"
+  printf "%b│%b %b%-3s%b %b│%b %b%-12s%b %b│%b %b%-10s%b %b│%b %b%-12s%b %b│%b\n" "$PK" "$NC" "$PK" "#" "$NC" "$PK" "$NC" "$PK" "User" "$NC" "$PK" "$NC" "$PK" "Protokol" "$NC" "$PK" "$NC" "$PK" "Berakhir" "$NC" "$PK" "$NC"
+  echo -e "${PK}├─────┼──────────────┼────────────┼──────────────┤${NC}"
   for f in "$DB_DIR"/*/*; do
     [ -f "$f" ] || continue
     proto=$(basename "$(dirname "$f")"); user=$(db_get "$f" user)
@@ -267,8 +269,13 @@ list_accounts() {
       elif [ "$(( (ep - now) / 3600 ))" -lt 24 ]; then days_left="$(( (ep - now) / 3600 )) jam"
       else days_left="$(( (ep - now) / 86400 )) hari"; fi
     else days_left="-"; fi
-    printf '%-14s %-12s %-12s %-16s %s\n' "$proto" "$user" "$(db_get "$f" created)" "$exp" "$days_left"
+    n=$((n+1))
+    printf "%b│%b %b%3s%b %b│%b %b%-12s%b %b│%b %b%-10s%b %b│%b %b%-12s%b %b│%b\n" "$PK" "$NC" "$CYN" "$n" "$NC" "$PK" "$NC" "$WH" "${user:0:12}" "$NC" "$PK" "$NC" "$YEL" "${proto:0:10}" "$NC" "$PK" "$NC" "$WH" "${exp:0:12}" "$NC" "$PK" "$NC"
   done
+  if [ "$n" -eq 0 ]; then
+    printf "%b│%b %-46s %b│%b\n" "$PK" "$NC" "  (belum ada akun)" "$PK" "$NC"
+  fi
+  echo -e "${PK}└─────┴──────────────┴────────────┴──────────────┘${NC}"
 }
 
 count_proto() { # count_proto <proto>
@@ -358,10 +365,12 @@ BRC
   echo "== instalasi selesai. Jalankan: near-tunnel =="
 }
 
-# ---------- menu (tampilan cyberpunk: garis pink + ungu) ----------
-PK='\033[1;95m'; PU='\033[1;95m'; WH='\033[1;37m'; NC='\033[0m'  # hanya pink
+# ---------- menu (gaya screenshot: sambutan teal/kuning, tabel hijau, daftar pink) ----------
+TEAL='\033[0;36m'; YEL='\033[1;33m'; GRN='\033[1;32m'; GRNI='\033[3;32m'
+PK='\033[1;95m'; PKI='\033[3;95m'; CYN='\033[0;36m'; WH='\033[1;37m'; GRY='\033[0;90m'; NC='\033[0m'
+PU="$PK"
 box_row() { # box_row <warna-garis> <teks>
-  printf "%b║%b %-50s %b║%b\n" "$1" "$NC" "$2" "$1" "$NC"
+  printf "%b║%b %-48s %b║%b\n" "$1" "$NC" "$2" "$1" "$NC"
 }
 
 show_header() {
@@ -373,21 +382,21 @@ show_header() {
   disk=$(df -h / 2>/dev/null | awk 'NR==2{print $3"/"$2}')
   if xray_running; then xst="JALAN"; else xst="MATI"; fi
   clear
-  echo -e "${PK}╔══════════════════════════════════════════════════╗${NC}"
-  box_row "$PU" "  NEAR CLOUD  -  Panel Script Tunneling"
-  box_row "$PU" "  near-tunnel $VERSION  (versi tes)"
-  echo -e "${PU}╠══════════════════════════════════════════════════╣${NC}"
-  box_row "$PK" "  Host    : $(hostname)"
-  box_row "$PK" "  IP      : $(pub_ip)"
-  box_row "$PK" "  OS      : $os"
-  box_row "$PK" "  Uptime  : $up"
-  box_row "$PK" "  RAM     : $mem   Disk: $disk"
-  box_row "$PK" "  Xray    : $xst (WS $VMESS_PORT/$VLESS_PORT/$TROJAN_PORT/$SS_PORT)"
-  box_row "$PK" "  Akun    : SSH $(count_proto ssh) | VMess $(count_proto vmess)"
-  box_row "$PK" "            VLess $(count_proto vless) | Trojan $(count_proto trojan)"
-  box_row "$PK" "            SS $(count_proto shadowsocks) | Trial $(count_proto trial)"
-  box_row "$PK" "  Domain  : $DOMAIN_OR_IP   Port link: $PORT"
-  echo -e "${PK}╚══════════════════════════════════════════════════╝${NC}"
+  echo -e "${TEAL}╔══════════════════════════════════════════════════╗${NC}"
+  printf "%b║%b %b%-48s%b %b║%b\n" "$TEAL" "$NC" "$YEL" "                ✦  WELCOME  ✦" "$NC" "$TEAL" "$NC"
+  printf "%b║%b %b%-48s%b %b║%b\n" "$TEAL" "$NC" "$GRY" "            Supported By Near Cloud" "$NC" "$TEAL" "$NC"
+  echo -e "${TEAL}╠══════════════════════════════════════════════════╣${NC}"
+  box_row "$TEAL" "  Host    : $(hostname)"
+  box_row "$TEAL" "  IP      : $(pub_ip)"
+  box_row "$TEAL" "  OS      : $os"
+  box_row "$TEAL" "  Uptime  : $up"
+  box_row "$TEAL" "  RAM     : $mem   Disk: $disk"
+  box_row "$TEAL" "  Xray    : $xst (WS $VMESS_PORT/$VLESS_PORT/$TROJAN_PORT/$SS_PORT)"
+  box_row "$TEAL" "  Akun    : SSH $(count_proto ssh) | VMess $(count_proto vmess)"
+  box_row "$TEAL" "            VLess $(count_proto vless) | Trojan $(count_proto trojan)"
+  box_row "$TEAL" "            SS $(count_proto shadowsocks) | Trial $(count_proto trial)"
+  box_row "$TEAL" "  Domain  : $DOMAIN_OR_IP   Port link: $PORT"
+  echo -e "${TEAL}╚══════════════════════════════════════════════════╝${NC}"
 }
 
 pause() { echo; read -r -p "Tekan Enter untuk kembali ke menu..." _x; }
@@ -406,39 +415,25 @@ menu_loop() {
   mkdir -p "$DB_DIR"
   while true; do
     show_header
-    echo -e "${PU}╔══════════════════════════════════════════════════╗${NC}"
-    box_row "$PK" "  MENU UTAMA"
-    echo -e "${PK}╠══════════════════════════════════════════════════╣${NC}"
-    local items=(
-      "[ 1] Buat Akun SSH"
-      "[ 2] Buat Akun VMess"
-      "[ 3] Buat Akun VLess"
-      "[ 4] Buat Akun Trojan"
-      "[ 5] Buat Akun Shadowsocks"
-      "[ 6] Buat Akun Trial (1 jam)"
-      "[ 7] Daftar Semua Akun"
-      "[ 8] Hapus Akun"
-      "[ 9] Perpanjang Akun"
-      "[10] Edit Akun (limit IP / bandwidth)"
-      "[11] Cek Akun Aktif / Cek Masa Aktif"
-      "[12] Restart Xray"
-      "[13] Restart Semua Layanan"
-      "[14] Cek Status Service"
-      "[15] Cek Port Aktif"
-      "[16] Speed Test VPS"
-      "[17] Auto Reboot"
-      "[18] Setup Notifikasi Telegram"
-      "[19] Ganti Domain"
-      "[20] Update Script"
-      "[21] Backup Akun"
-      "[ 0] Keluar"
+    echo -e "${GRNI}  MENU UTAMA${NC}"
+    echo -e "${GRN}┌──────┬──────────────────────────────────────────────┐${NC}"
+    printf "%b│%b %b%4s%b %b│%b %b%-42s%b %b│%b\n" "$GRN" "$NC" "$GRN" "Key" "$NC" "$GRN" "$NC" "$GRN" "Aksi" "$NC" "$GRN" "$NC"
+    echo -e "${GRN}├──────┼──────────────────────────────────────────────┤${NC}"
+    local keys=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 0)
+    local acts=(
+      "Buat Akun SSH" "Buat Akun VMess" "Buat Akun VLess" "Buat Akun Trojan"
+      "Buat Akun Shadowsocks" "Buat Akun Trial (1 jam)" "Daftar Semua Akun"
+      "Hapus Akun" "Perpanjang Akun" "Edit Akun (limit IP / bandwidth)"
+      "Cek Akun Aktif / Cek Masa Aktif" "Restart Xray" "Restart Semua Layanan"
+      "Cek Status Service" "Cek Port Aktif" "Speed Test VPS" "Auto Reboot"
+      "Setup Notifikasi Telegram" "Ganti Domain" "Update Script" "Backup Akun" "Keluar"
     )
-    local i c
-    for i in "${!items[@]}"; do
-      box_row "$PK" "  ${items[$i]}"
+    local i
+    for i in "${!keys[@]}"; do
+      printf "%b│%b %b%4s%b %b│%b %b%-42s%b %b│%b\n" "$GRN" "$NC" "$CYN" "${keys[$i]}" "$NC" "$GRN" "$NC" "$YEL" "${acts[$i]}" "$NC" "$GRN" "$NC"
     done
-    echo -e "${PK}╚══════════════════════════════════════════════════╝${NC}"
-    printf "%bPilih nomor [0-21]: %b" "$PK" "$NC"
+    echo -e "${GRN}└──────┴──────────────────────────────────────────────┘${NC}"
+    printf "%b➤ Pilih nomor [0-21]: %b" "$CYN" "$NC"
     IFS= read -r pil
     case "$pil" in
       1) ask_create ssh "SSH" ;;
