@@ -358,29 +358,36 @@ BRC
   echo "== instalasi selesai. Jalankan: near-tunnel =="
 }
 
-# ---------- menu ----------
+# ---------- menu (tampilan cyberpunk: garis pink + ungu) ----------
+PK='\033[1;95m'; PU='\033[1;35m'; WH='\033[1;37m'; NC='\033[0m'
+box_row() { # box_row <warna-garis> <teks>
+  printf "%b║%b %-50s %b║%b\n" "$1" "$NC" "$2" "$1" "$NC"
+}
+
 show_header() {
   load_settings
   local os up mem disk xst
-  os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"')
-  up=$(uptime -p 2>/dev/null || uptime)
+  os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"'); os=${os:0:32}
+  up=$(uptime -p 2>/dev/null || uptime); up=${up:0:30}
   mem=$(free -h 2>/dev/null | awk '/Mem:/{print $3"/"$2}')
   disk=$(df -h / 2>/dev/null | awk 'NR==2{print $3"/"$2}')
   if xray_running; then xst="JALAN"; else xst="MATI"; fi
   clear
-  echo "=================================================="
-  echo "  NEAR CLOUD  -  Panel Script Tunneling"
-  echo "  near-tunnel $VERSION  (versi tes)"
-  echo "=================================================="
-  echo " Host     : $(hostname)"
-  echo " IP       : $(pub_ip)"
-  echo " OS       : $os"
-  echo " Uptime   : $up"
-  echo " RAM      : $mem   Disk: $disk"
-  echo " Xray     : $xst   (WS $VMESS_PORT/$VLESS_PORT/$TROJAN_PORT/$SS_PORT)"
-  echo " Akun     : SSH $(count_proto ssh) | VMess $(count_proto vmess) | VLess $(count_proto vless) | Trojan $(count_proto trojan) | SS $(count_proto shadowsocks) | Trial $(count_proto trial)"
-  echo " Domain   : $DOMAIN_OR_IP   Port link: $PORT"
-  echo "=================================================="
+  echo -e "${PK}╔══════════════════════════════════════════════════╗${NC}"
+  box_row "$PU" "  NEAR CLOUD  -  Panel Script Tunneling"
+  box_row "$PU" "  near-tunnel $VERSION  (versi tes)"
+  echo -e "${PU}╠══════════════════════════════════════════════════╣${NC}"
+  box_row "$PK" "  Host    : $(hostname)"
+  box_row "$PK" "  IP      : $(pub_ip)"
+  box_row "$PK" "  OS      : $os"
+  box_row "$PK" "  Uptime  : $up"
+  box_row "$PK" "  RAM     : $mem   Disk: $disk"
+  box_row "$PK" "  Xray    : $xst (WS $VMESS_PORT/$VLESS_PORT/$TROJAN_PORT/$SS_PORT)"
+  box_row "$PK" "  Akun    : SSH $(count_proto ssh) | VMess $(count_proto vmess)"
+  box_row "$PK" "            VLess $(count_proto vless) | Trojan $(count_proto trojan)"
+  box_row "$PK" "            SS $(count_proto shadowsocks) | Trial $(count_proto trial)"
+  box_row "$PK" "  Domain  : $DOMAIN_OR_IP   Port link: $PORT"
+  echo -e "${PK}╚══════════════════════════════════════════════════╝${NC}"
 }
 
 pause() { echo; read -r -p "Tekan Enter untuk kembali ke menu..." _x; }
@@ -399,32 +406,41 @@ menu_loop() {
   mkdir -p "$DB_DIR"
   while true; do
     show_header
-    cat <<'MENU'
- 1  Buat Akun SSH
- 2  Buat Akun VMess
- 3  Buat Akun VLess
- 4  Buat Akun Trojan
- 5  Buat Akun Shadowsocks
- 6  Buat Akun Trial (1 jam, semua protokol Xray)
- 7  Daftar Semua Akun
- 8  Hapus Akun
- 9  Perpanjang Akun
- 10 Edit Akun (limit IP / bandwidth)
- 11 Cek Akun Aktif / Cek Masa Aktif
- 12 Restart Xray
- 13 Restart Semua Layanan
- 14 Cek Status Service
- 15 Cek Port Aktif
- 16 Speed Test VPS
- 17 Auto Reboot
- 18 Setup Notifikasi Telegram
- 19 Ganti Domain
- 20 Update Script
- 21 Backup Akun
- 0  Keluar
-MENU
-    echo "--------------------------------------------------"
-    read -r -p "Pilih nomor [0-21]: " pil
+    echo -e "${PU}╔══════════════════════════════════════════════════╗${NC}"
+    box_row "$PK" "  MENU UTAMA"
+    echo -e "${PK}╠══════════════════════════════════════════════════╣${NC}"
+    local items=(
+      "[ 1] Buat Akun SSH"
+      "[ 2] Buat Akun VMess"
+      "[ 3] Buat Akun VLess"
+      "[ 4] Buat Akun Trojan"
+      "[ 5] Buat Akun Shadowsocks"
+      "[ 6] Buat Akun Trial (1 jam)"
+      "[ 7] Daftar Semua Akun"
+      "[ 8] Hapus Akun"
+      "[ 9] Perpanjang Akun"
+      "[10] Edit Akun (limit IP / bandwidth)"
+      "[11] Cek Akun Aktif / Cek Masa Aktif"
+      "[12] Restart Xray"
+      "[13] Restart Semua Layanan"
+      "[14] Cek Status Service"
+      "[15] Cek Port Aktif"
+      "[16] Speed Test VPS"
+      "[17] Auto Reboot"
+      "[18] Setup Notifikasi Telegram"
+      "[19] Ganti Domain"
+      "[20] Update Script"
+      "[21] Backup Akun"
+      "[ 0] Keluar"
+    )
+    local i c
+    for i in "${!items[@]}"; do
+      if (( i % 2 == 0 )); then c="$PK"; else c="$PU"; fi
+      box_row "$c" "  ${items[$i]}"
+    done
+    echo -e "${PK}╚══════════════════════════════════════════════════╝${NC}"
+    printf "%bPilih nomor [0-21]: %b" "$PK" "$NC"
+    IFS= read -r pil
     case "$pil" in
       1) ask_create ssh "SSH" ;;
       2) ask_create vmess "VMess" ;;
