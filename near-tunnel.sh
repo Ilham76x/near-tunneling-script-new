@@ -336,6 +336,23 @@ do_install() {
   "$XRAY_BIN" version | head -3
   cp "$0" /usr/local/sbin/near-tunnel 2>/dev/null || true
   chmod +x /usr/local/sbin/near-tunnel "$XRAY_BIN" 2>/dev/null || true
+  # Perintah singkat "menu" (seperti st-pusat) + menu otomatis saat login root
+  cat > /usr/local/sbin/menu <<'EOF'
+#!/bin/bash
+exec /usr/local/sbin/near-tunnel "$@"
+EOF
+  chmod +x /usr/local/sbin/menu
+  if ! grep -q 'NEAR-TUNNEL-AUTOMENU' /root/.bashrc 2>/dev/null; then
+    cat >> /root/.bashrc <<'BRC'
+
+# >>> NEAR-TUNNEL-AUTOMENU >>>
+if [[ $- == *i* ]]; then
+  near-tunnel
+fi
+# <<< NEAR-TUNNEL-AUTOMENU <<<
+BRC
+  fi
+  echo "Menu otomatis aktif: ketik 'menu' atau 'near-tunnel', atau tampil sendiri setiap login root."
   build_xray_config
   restart_xray
   echo "== instalasi selesai. Jalankan: near-tunnel =="
