@@ -368,7 +368,7 @@ show_header() {
   load_settings
   local os up mem disk xst
   os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"'); os=${os:0:32}
-  up=$(uptime -p 2>/dev/null || uptime); up=${up:0:30}
+  up=$(uptime -p 2>/dev/null || uptime); up=${up:0:36}
   mem=$(free -h 2>/dev/null | awk '/Mem:/{print $3"/"$2}')
   disk=$(df -h / 2>/dev/null | awk 'NR==2{print $3"/"$2}')
   if xray_running; then xst="JALAN"; else xst="MATI"; fi
