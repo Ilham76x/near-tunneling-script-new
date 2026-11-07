@@ -270,7 +270,7 @@ list_accounts() {
       else days_left="$(( (ep - now) / 86400 )) hari"; fi
     else days_left="-"; fi
     n=$((n+1))
-    printf "%b│%b %b%3s%b %b│%b %b%-12s%b %b│%b %b%-10s%b %b│%b %b%-12s%b %b│%b\n" "$PK" "$NC" "$CYN" "$n" "$NC" "$PK" "$NC" "$WH" "${user:0:12}" "$NC" "$PK" "$NC" "$YEL" "${proto:0:10}" "$NC" "$PK" "$NC" "$WH" "${exp:0:12}" "$NC" "$PK" "$NC"
+    printf "%b│%b %b%3s%b %b│%b %b%-12s%b %b│%b %b%-10s%b %b│%b %b%-12s%b %b│%b\n" "$PK" "$NC" "$CYN" "$n" "$NC" "$PK" "$NC" "$WH" "${user:0:12}" "$NC" "$PK" "$NC" "$YEL" "${proto:0:10}" "$NC" "$PK" "$NC" "$WH" "${exp:0:10}" "$NC" "$PK" "$NC"
   done
   if [ "$n" -eq 0 ]; then
     printf "%b│%b %-46s %b│%b\n" "$PK" "$NC" "  (belum ada akun)" "$PK" "$NC"
