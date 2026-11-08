@@ -233,14 +233,27 @@ print_link() { # print_link <proto> <user>
   local proto="$1" user="$2" f uuid pw b64
   f=$(find_db "$user") || { echo "User $user tidak ditemukan."; return 1; }
   uuid=$(db_get "$f" uuid); pw=$(db_get "$f" password)
+  # Host link: kalau DOMAIN berupa nama domain (bukan IP), tiap protokol WS
+  # memakai subdomain-nya sendiri, karena rute tunnel Cloudflare dibuat
+  # per-subdomain (vmess/vless/trojan.<domain>). Domain utuh tidak punya
+  # rute tunnel, jadi link dengan domain utuh tidak konek.
+  local link_host="$DOMAIN_OR_IP"
+  case "$DOMAIN_OR_IP" in
+    *[!0-9.]*)
+      case "$proto" in
+        vmess) link_host="vmess.$DOMAIN_OR_IP" ;;
+        vless) link_host="vless.$DOMAIN_OR_IP" ;;
+        trojan) link_host="trojan.$DOMAIN_OR_IP" ;;
+      esac ;;
+  esac
   case "$proto" in
     vmess)
-      b64=$(printf '{"v":"2","ps":"%s","add":"%s","port":"%s","id":"%s","aid":"0","net":"ws","type":"none","host":"%s","path":"/vmess","tls":""}' "$user" "$DOMAIN_OR_IP" "$PORT" "$uuid" "$DOMAIN_OR_IP" | base64 -w0)
+      b64=$(printf '{"v":"2","ps":"%s","add":"%s","port":"%s","id":"%s","aid":"0","net":"ws","type":"none","host":"%s","path":"/vmess","tls":""}' "$user" "$link_host" "$PORT" "$uuid" "$link_host" | base64 -w0)
       echo "vmess://$b64" ;;
     vless)
-      echo "vless://$uuid@$DOMAIN_OR_IP:$PORT?encryption=none&security=none&type=ws&host=$DOMAIN_OR_IP&path=%2Fvless#$user" ;;
+      echo "vless://$uuid@$link_host:$PORT?encryption=none&security=none&type=ws&host=$link_host&path=%2Fvless#$user" ;;
     trojan)
-      echo "trojan://$uuid@$DOMAIN_OR_IP:$PORT?security=none&type=ws&host=$DOMAIN_OR_IP&path=%2Ftrojan#$user" ;;
+      echo "trojan://$uuid@$link_host:$PORT?security=none&type=ws&host=$link_host&path=%2Ftrojan#$user" ;;
     shadowsocks)
       b64=$(printf 'aes-256-gcm:%s@%s:%s' "$pw" "$DOMAIN_OR_IP" "$PORT" | base64 -w0)
       echo "ss://$b64#$user" ;;
@@ -365,46 +378,140 @@ BRC
   echo "== instalasi selesai. Jalankan: near-tunnel =="
 }
 
-# ---------- menu (gaya screenshot: sambutan teal/kuning, tabel hijau, daftar pink) ----------
-TEAL='\033[0;36m'; YEL='\033[1;33m'; GRN='\033[1;32m'; GRNI='\033[3;32m'
-PK='\033[1;95m'; PKI='\033[3;95m'; CYN='\033[0;36m'; WH='\033[1;37m'; GRY='\033[0;90m'; NC='\033[0m'
-PU="$PK"
-box_row() { # box_row <warna-garis> <teks>
-  printf "%b║%b %-48s %b║%b\n" "$1" "$NC" "$2" "$1" "$NC"
+# ---------- menu cyberpunk ----------
+# Palet neon cyberpunk
+NC='\033[0m'
+BOLD='\033[1m'; DIM='\033[2m'; ITAL='\033[3m'
+NEON_CYAN='\033[38;5;51m'
+NEON_MAG='\033[38;5;201m'
+NEON_GRN='\033[38;5;46m'
+NEON_YEL='\033[38;5;226m'
+NEON_ORG='\033[38;5;208m'
+NEON_PNK='\033[38;5;213m'
+NEON_BLU='\033[38;5;45m'
+NEON_PUR='\033[38;5;141m'
+NEON_RED='\033[38;5;196m'
+GRY='\033[38;5;240m'
+WH='\033[38;5;255m'
+
+# Alias lama agar tidak pecah kalau masih dipakai
+TEAL="$NEON_CYAN"; YEL="$NEON_YEL"; GRN="$NEON_GRN"; GRNI="$NEON_GRN"
+PK="$NEON_MAG"; PKI="$NEON_PNK"; CYN="$NEON_CYAN"; PU="$NEON_MAG"
+
+# Lebar total box
+BOX_W=58
+
+# Garis double-line neon
+hr_top()    { local c="$1"; printf "%b╔" "$c"; printf '═%.0s' $(seq 1 $BOX_W); printf "╗%b\n" "$NC"; }
+hr_mid()    { local c="$1"; printf "%b╠" "$c"; printf '═%.0s' $(seq 1 $BOX_W); printf "╣%b\n" "$NC"; }
+hr_bot()    { local c="$1"; printf "%b╚" "$c"; printf '═%.0s' $(seq 1 $BOX_W); printf "╝%b\n" "$NC"; }
+
+# Hitung lebar kolom teks (tanpa ANSI), tidak tergantung locale:
+# di locale POSIX, ${#teks} menghitung byte, padahal simbol seperti ✦/●
+# itu 3 byte tapi 1 kolom. vislen menghitung byte lalu mengurangi 2
+# untuk tiap karakter UTF-8 3-byte, jadi padding box selalu pas.
+vislen() {
+  local s="$1" b mb
+  b=$(printf '%s' "$s" | wc -c)
+  mb=$(printf '%s' "$s" | LC_ALL=C grep -o $'[\xE0-\xEF][\x80-\xBF][\x80-\xBF]' | wc -l)
+  echo $(( b - 2 * mb ))
 }
+
+# Baris teks di dalam box
+# row <warna> <teks>  (teks akan di-pad ke BOX_W-2)
+# Perbaikan Zero: format printf diselaraskan — %*s makan 2 argumen
+# (lebar + string), jadi argumen warna/teks harus pas, kalau tidak
+# angka pad dan kode warna bocor jadi teks dan muncul error "invalid number".
+row() {
+  local c="$1" t="$2"
+  # hitung panjang visual (strip ANSI)
+  local plain; plain=$(printf "%b" "$t" | sed -E 's/\x1b\[[0-9;]*m//g')
+  local len; len=$(vislen "$plain")
+  local pad=$(( BOX_W - 2 - len ))
+  [ "$pad" -lt 0 ] && pad=0
+  printf "%b║%b %b%*s %b║%b\n" "$c" "$NC" "$t" "$pad" "" "$c" "$NC"
+}
+
+# Baris tabel: tbl_row <warna_kiri> <warna_kanan> <kiri> <kanan>
+tbl_row() {
+  local cl="$1" cr="$2" l="$3" r="$4"
+  local pl; pl=$(printf "%b" "$l" | sed -E 's/\x1b\[[0-9;]*m//g')
+  local pr; pr=$(printf "%b" "$r" | sed -E 's/\x1b\[[0-9;]*m//g')
+  local ll; ll=$(vislen "$pl"); local rl; rl=$(vislen "$pr")
+  local lw=6; local rw=$(( BOX_W - 2 - lw - 3 ))
+  local lp=$(( lw - ll )); [ $lp -lt 0 ] && lp=0
+  local rp=$(( rw - rl )); [ $rp -lt 0 ] && rp=0
+  printf "%b║%b %b%*s %b│%b %b%*s %b║%b\n" \
+    "$cl" "$NC" "$l" "$lp" "" "$cl" "$NC" "$r" "$rp" "" "$cl" "$NC"
+}
+
+# Header tabel dengan judul kolom (lebar kolom disamakan dengan tbl_row: key 6, aksi 47)
+tbl_head() {
+  local c="$1"
+  printf "%b║%b %b%-6s%b %b│%b %b%-47s%b %b║%b\n" \
+    "$c" "$NC" "$c" "KEY" "$NC" "$c" "$NC" "$c" "AKSI" "$NC" "$c" "$NC"
+}
+
+# Efek glow / typing (opsional, ringan)
+glow() { printf "%b%s%b" "$1" "$2" "$NC"; }
 
 show_header() {
   load_settings
-  local os up mem disk xst
+  local os up mem disk xst xpid
   os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"'); os=${os:0:32}
   up=$(uptime -p 2>/dev/null || uptime); up=${up:0:36}
   mem=$(free -h 2>/dev/null | awk '/Mem:/{print $3"/"$2}')
   disk=$(df -h / 2>/dev/null | awk 'NR==2{print $3"/"$2}')
-  if xray_running; then xst="JALAN"; else xst="MATI"; fi
+  if xray_running; then xst="${NEON_GRN}● ONLINE${NC}"; xpid=$(cat "$XRAY_PID" 2>/dev/null || echo "-"); else xst="${NEON_RED}● OFFLINE${NC}"; xpid="-"; fi
+
   clear
-  echo -e "${TEAL}╔══════════════════════════════════════════════════╗${NC}"
-  printf "%b║%b %b%-48s%b %b║%b\n" "$TEAL" "$NC" "$YEL" "                ✦  WELCOME  ✦" "$NC" "$TEAL" "$NC"
-  printf "%b║%b %b%-48s%b %b║%b\n" "$TEAL" "$NC" "$GRY" "            Supported By Near Cloud" "$NC" "$TEAL" "$NC"
-  echo -e "${TEAL}╠══════════════════════════════════════════════════╣${NC}"
-  box_row "$TEAL" "  Host    : $(hostname)"
-  box_row "$TEAL" "  IP      : $(pub_ip)"
-  box_row "$TEAL" "  OS      : $os"
-  box_row "$TEAL" "  Uptime  : $up"
-  box_row "$TEAL" "  RAM     : $mem   Disk: $disk"
-  box_row "$TEAL" "  Xray    : $xst (WS $VMESS_PORT/$VLESS_PORT/$TROJAN_PORT/$SS_PORT)"
-  box_row "$TEAL" "  Akun    : SSH $(count_proto ssh) | VMess $(count_proto vmess)"
-  box_row "$TEAL" "            VLess $(count_proto vless) | Trojan $(count_proto trojan)"
-  box_row "$TEAL" "            SS $(count_proto shadowsocks) | Trial $(count_proto trial)"
-  box_row "$TEAL" "  Domain  : $DOMAIN_OR_IP   Port link: $PORT"
-  echo -e "${TEAL}╚══════════════════════════════════════════════════╝${NC}"
+  # Banner neon
+  printf "%b" "$NEON_MAG"
+  cat <<'BANNER'
+   ███╗   ██╗███████╗ █████╗ ██████╗
+   ████╗  ██║██╔════╝██╔══██╗██╔══██╗
+   ██╔██╗ ██║█████╗  ███████║██████╔╝
+   ██║╚██╗██║██╔══╝  ██╔══██║██╔══██╗
+   ██║ ╚████║███████╗██║  ██║██║  ██║
+   ╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
+BANNER
+  printf "%b" "$NC"
+  printf "%b              ── T U N N E L ──              %b\n" "$NEON_CYAN" "$NC"
+  printf "%b           [ %s | v%s ]%b\n\n" "$NEON_YEL" "NEAR CLOUD" "$VERSION" "$NC"
+
+  # Panel info sistem
+  hr_top "$NEON_CYAN"
+  row "$NEON_CYAN" "$(glow "$NEON_MAG$BOLD" "  ✦ SYSTEM INFO")"
+  hr_mid "$NEON_CYAN"
+  row "$NEON_CYAN" "  ${NEON_YEL}Host   ${NC}: ${WH}$(hostname)${NC}"
+  row "$NEON_CYAN" "  ${NEON_YEL}IP     ${NC}: ${WH}$(pub_ip)${NC}"
+  row "$NEON_CYAN" "  ${NEON_YEL}OS     ${NC}: ${WH}${os}${NC}"
+  row "$NEON_CYAN" "  ${NEON_YEL}Uptime ${NC}: ${WH}${up}${NC}"
+  row "$NEON_CYAN" "  ${NEON_YEL}RAM    ${NC}: ${WH}${mem}${NC}  ${NEON_YEL}Disk${NC}: ${WH}${disk}${NC}"
+  hr_mid "$NEON_CYAN"
+  row "$NEON_CYAN" "  ${NEON_YEL}Xray   ${NC}: ${xst}  ${GRY}PID ${xpid}${NC}"
+  row "$NEON_CYAN" "  ${NEON_YEL}Ports  ${NC}: ${NEON_BLU}WS ${VMESS_PORT}/${VLESS_PORT}/${TROJAN_PORT}/${SS_PORT}${NC}"
+  row "$NEON_CYAN" "  ${NEON_YEL}Domain ${NC}: ${WH}${DOMAIN_OR_IP}${NC}  ${NEON_YEL}Link Port${NC}: ${WH}${PORT}${NC}"
+  hr_mid "$NEON_CYAN"
+  # Baris jumlah akun (mini-tabel)
+  local ssh_n vmess_n vless_n trojan_n ss_n trial_n
+  ssh_n=$(count_proto ssh); vmess_n=$(count_proto vmess); vless_n=$(count_proto vless)
+  trojan_n=$(count_proto trojan); ss_n=$(count_proto shadowsocks); trial_n=$(count_proto trial)
+  row "$NEON_CYAN" "  ${NEON_PNK}SSH ${WH}${ssh_n}${NC}  ${NEON_PNK}VMess ${WH}${vmess_n}${NC}  ${NEON_PNK}VLess ${WH}${vless_n}${NC}  ${NEON_PNK}Trojan ${WH}${trojan_n}${NC}"
+  row "$NEON_CYAN" "  ${NEON_PNK}SS ${WH}${ss_n}${NC}   ${NEON_PNK}Trial ${WH}${trial_n}${NC}"
+  hr_bot "$NEON_CYAN"
+  echo
 }
 
-pause() { echo; read -r -p "Tekan Enter untuk kembali ke menu..." _x; }
+pause() { echo; printf "%b  ⏎  Tekan Enter untuk kembali...%b" "$DIM$NEON_CYAN" "$NC"; read -r _x; }
 
 ask_create() { # ask_create <proto> <label>
   local proto="$1" label="$2" user days
-  read -r -p "Nama user: " user
-  read -r -p "Masa aktif (hari): " days
+  echo
+  printf "%b╭─ BUAT AKUN %s ─────────────────────────────╮%b\n" "$NEON_GRN" "$label" "$NC"
+  printf "%b│%b " "$NEON_GRN" "$NC"; read -r -p "Nama user        : " user
+  printf "%b│%b " "$NEON_GRN" "$NC"; read -r -p "Masa aktif (hari): " days
+  printf "%b╰────────────────────────────────────────────╯%b\n" "$NEON_GRN" "$NC"
   days=${days:-30}
   add_account "$proto" "$user" "$days"
   pause
@@ -415,10 +522,14 @@ menu_loop() {
   mkdir -p "$DB_DIR"
   while true; do
     show_header
-    echo -e "${GRNI}  MENU UTAMA${NC}"
-    echo -e "${GRN}┌──────┬──────────────────────────────────────────────┐${NC}"
-    printf "%b│%b %b%4s%b %b│%b %b%-42s%b %b│%b\n" "$GRN" "$NC" "$GRN" "Key" "$NC" "$GRN" "$NC" "$GRN" "Aksi" "$NC" "$GRN" "$NC"
-    echo -e "${GRN}├──────┼──────────────────────────────────────────────┤${NC}"
+
+    # Panel menu utama
+    hr_top "$NEON_MAG"
+    row "$NEON_MAG" "$(glow "$NEON_PNK$BOLD" "  ▸ MENU UTAMA")"
+    hr_mid "$NEON_MAG"
+    tbl_head "$NEON_MAG"
+    hr_mid "$NEON_MAG"
+
     local keys=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 0)
     local acts=(
       "Buat Akun SSH" "Buat Akun VMess" "Buat Akun VLess" "Buat Akun Trojan"
@@ -428,37 +539,60 @@ menu_loop() {
       "Cek Status Service" "Cek Port Aktif" "Speed Test VPS" "Auto Reboot"
       "Setup Notifikasi Telegram" "Ganti Domain" "Update Script" "Backup Akun" "Keluar"
     )
+
     local i
     for i in "${!keys[@]}"; do
-      printf "%b│%b %b%4s%b %b│%b %b%-42s%b %b│%b\n" "$GRN" "$NC" "$CYN" "${keys[$i]}" "$NC" "$GRN" "$NC" "$YEL" "${acts[$i]}" "$NC" "$GRN" "$NC"
+      local k="${keys[$i]}" a="${acts[$i]}"
+      local kc="$NEON_CYAN" ac="$WH"
+      # Warna per kategori
+      case "$k" in
+        0)  kc="$NEON_RED"; ac="$NEON_RED" ;;               # Keluar
+        7|11) kc="$NEON_BLU"; ac="$NEON_BLU" ;;             # Daftar/cek
+        8)  kc="$NEON_RED"; ac="$NEON_ORG" ;;               # Hapus
+        9|10) kc="$NEON_YEL"; ac="$NEON_YEL" ;;             # Extend/edit
+        12|13|14|15) kc="$NEON_ORG"; ac="$NEON_ORG" ;;      # Service
+        16) kc="$NEON_PUR"; ac="$NEON_PUR" ;;               # Speedtest
+        17) kc="$NEON_PUR"; ac="$NEON_PUR" ;;               # Auto reboot
+        18|19|20) kc="$NEON_PNK"; ac="$NEON_PNK" ;;         # Setting
+        21) kc="$NEON_GRN"; ac="$NEON_GRN" ;;               # Backup
+        *)  kc="$NEON_GRN"; ac="$NEON_GRN" ;;               # Buat akun
+      esac
+      # Format key jadi 2 digit agar rapi
+      local kfmt; kfmt=$(printf "%2s" "$k")
+      tbl_row "$NEON_MAG" "$NEON_MAG" "$kc$kfmt$NC" "$ac$a$NC"
     done
-    echo -e "${GRN}└──────┴──────────────────────────────────────────────┘${NC}"
-    printf "%b➤ Pilih nomor [0-21]: %b" "$CYN" "$NC"
+
+    hr_bot "$NEON_MAG"
+    echo
+    printf "%b  ➤ Pilih nomor %b[%b0-21%b]%b : %b" \
+      "$NEON_CYAN" "$NC" "$NEON_YEL" "$NC" "$NEON_CYAN" "$NC"
     IFS= read -r pil
+    echo
+
     case "$pil" in
       1) ask_create ssh "SSH" ;;
       2) ask_create vmess "VMess" ;;
       3) ask_create vless "VLess" ;;
       4) ask_create trojan "Trojan" ;;
       5) ask_create shadowsocks "Shadowsocks" ;;
-      6) read -r -p "Nama user trial: " u; add_account trial "$u" 0 1; pause ;;
+      6) printf "%b  Nama user trial: %b" "$NEON_YEL" "$NC"; read -r u; add_account trial "$u" 0 1; pause ;;
       7) list_accounts; pause ;;
-      8) read -r -p "Nama user yang dihapus: " u; delete_account "$u"; pause ;;
-      9) read -r -p "Nama user: " u; read -r -p "Tambah berapa hari: " d; extend_account "$u" "${d:-7}"; pause ;;
-      10) read -r -p "Nama user: " u; read -r -p "Limit IP (0 = tanpa batas): " l; read -r -p "Bandwidth GB (0 = tanpa batas): " b; edit_account "$u" "${l:-0}" "${b:-0}"; pause ;;
+      8) printf "%b  Nama user yang dihapus: %b" "$NEON_RED" "$NC"; read -r u; delete_account "$u"; pause ;;
+      9) printf "%b  Nama user: %b" "$NEON_YEL" "$NC"; read -r u; printf "%b  Tambah berapa hari: %b" "$NEON_YEL" "$NC"; read -r d; extend_account "$u" "${d:-7}"; pause ;;
+      10) printf "%b  Nama user: %b" "$NEON_YEL" "$NC"; read -r u; printf "%b  Limit IP (0=tak terbatas): %b" "$NEON_YEL" "$NC"; read -r l; printf "%b  Bandwidth GB (0=tak terbatas): %b" "$NEON_YEL" "$NC"; read -r b; edit_account "$u" "${l:-0}" "${b:-0}"; pause ;;
       11) list_accounts; pause ;;
       12) restart_xray; pause ;;
       13) echo "Mode tes: tidak ada systemd di VPS trial. SSHD tidak di-restart (dilarang)."; restart_xray; pause ;;
-      14) if xray_running; then echo "Xray: JALAN (PID $(cat $XRAY_PID 2>/dev/null))"; else echo "Xray: MATI"; fi; "$XRAY_BIN" version 2>/dev/null | head -2; echo "--- port listen ---"; (ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null) | grep -E '1008|46824|22' || true; pause ;;
+      14) if xray_running; then printf "%bXray: JALAN (PID %s)%b\n" "$NEON_GRN" "$(cat $XRAY_PID 2>/dev/null)" "$NC"; else printf "%bXray: MATI%b\n" "$NEON_RED" "$NC"; fi; "$XRAY_BIN" version 2>/dev/null | head -2; echo "--- port listen ---"; (ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null) | grep -E '1008|46824|22' || true; pause ;;
       15) (ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null) || echo "ss/netstat tidak tersedia"; pause ;;
       16) echo "Speed test (unduh 25MB dari Cloudflare)..."; curl -s -o /dev/null -w "Waktu: %{time_total}s  Kecepatan: %{speed_download} byte/s\n" https://speed.cloudflare.com/__down?bytes=25000000 || echo "Speed test gagal (cek internet VPS)."; pause ;;
       17) echo "Mode tes: Auto Reboot BELUM AKTIF di VPS trial (tanpa systemd). Akan aktif di VPS baru."; pause ;;
-      18) read -r -p "Chat ID Telegram: " cid; read -r -s -p "Bot token Telegram (tidak ditampilkan): " tok; echo; printf 'CHAT_ID="%s"\nBOT_TOKEN="%s"\n' "$cid" "$tok" > "$NT_DIR/telegram.conf"; chmod 600 "$NT_DIR/telegram.conf"; unset tok; echo "Tersimpan di $NT_DIR/telegram.conf (600). Token tidak ditampilkan di sini."; pause ;;
-      19) read -r -p "Domain / IP baru: " nd; read -r -p "Port link baru [$PORT]: " np; [ -n "$nd" ] && DOMAIN_OR_IP="$nd"; [ -n "$np" ] && PORT="$np"; save_settings; echo "OK: domain=$DOMAIN_OR_IP port=$PORT (Xray tetap WS polos di localhost; TLS/domain dipasang di VPS baru)."; pause ;;
-      20) echo "Mode tes: Update Script BELUM AKTIF di VPS trial. Akan aktif di VPS baru (cek rilis baru, lalu ganti file). Versi ini: $VERSION"; pause ;;
-      21) mkdir -p /root; tar -czf "/root/near-tunnel-backup-$(date +%Y%m%d-%H%M).tar.gz" -C /etc near-tunnel 2>/dev/null && echo "Backup tersimpan di /root/near-tunnel-backup-*.tar.gz" || echo "Backup gagal."; pause ;;
-      0) echo "Keluar. Sampai jumpa."; exit 0 ;;
-      *) echo "Pilihan tidak ada."; sleep 1 ;;
+      18) printf "%b  Chat ID Telegram: %b" "$NEON_PNK" "$NC"; read -r cid; printf "%b  Bot token (hidden): %b" "$NEON_PNK" "$NC"; read -r -s tok; echo; printf 'CHAT_ID="%s"\nBOT_TOKEN="%s"\n' "$cid" "$tok" > "$NT_DIR/telegram.conf"; chmod 600 "$NT_DIR/telegram.conf"; unset tok; echo "Tersimpan di $NT_DIR/telegram.conf (600)."; pause ;;
+      19) printf "%b  Domain/IP baru: %b" "$NEON_PNK" "$NC"; read -r nd; printf "%b  Port link baru [%s]: %b" "$NEON_PNK" "$PORT" "$NC"; read -r np; [ -n "$nd" ] && DOMAIN_OR_IP="$nd"; [ -n "$np" ] && PORT="$np"; save_settings; echo "OK: domain=$DOMAIN_OR_IP port=$PORT"; pause ;;
+      20) echo "Mode tes: Update Script BELUM AKTIF. Versi: $VERSION"; pause ;;
+      21) mkdir -p /root; tar -czf "/root/near-tunnel-backup-$(date +%Y%m%d-%H%M).tar.gz" -C /etc near-tunnel 2>/dev/null && echo "Backup: /root/near-tunnel-backup-*.tar.gz" || echo "Backup gagal."; pause ;;
+      0) printf "%b  ⏻  Keluar. Sampai jumpa.%b\n" "$NEON_MAG" "$NC"; exit 0 ;;
+      *) printf "%b  ✗ Pilihan tidak ada.%b\n" "$NEON_RED" "$NC"; sleep 1 ;;
     esac
   done
 }
